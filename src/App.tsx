@@ -3,27 +3,26 @@ import { useEffect, useState } from 'react'
 const API_URL = 'https://kooz-backend.onrender.com'
 
 export default function App() {
-  const [user, setUser] = useState<any>(null)
-  const [masters, setMasters] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState('')
+  const [status, setStatus] = useState('Загрузка...')
 
   useEffect(() => {
+    // Проверяем, открыто ли через Telegram
     const tg = (window as any).Telegram?.WebApp
     if (!tg) {
-      setError('Откройте через Telegram')
-      setLoading(false)
+      setStatus('Откройте через Telegram')
       return
     }
+
     tg.ready()
     tg.expand()
 
     const initData = tg.initData
     if (!initData) {
-      setError('Откройте через Telegram (нет initData)')
-      setLoading(false)
+      setStatus('Ошибка: нет initData')
       return
     }
+
+    setStatus('Авторизация...')
 
     fetch(`${API_URL}/api/auth/telegram`, {
       method: 'POST',
@@ -31,46 +30,22 @@ export default function App() {
       body: JSON.stringify({ initData }),
     })
       .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
+        if (!r.ok) throw new Error(`Сервер ответил ${r.status}`)
         return r.json()
       })
       .then(data => {
         if (data.error) throw new Error(data.error)
-        setUser(data.user)
-        localStorage.setItem('token', data.token)
-        return fetch(`${API_URL}/api/masters`)
-      })
-      .then(r => {
-        if (!r.ok) throw new Error(`HTTP ${r.status}`)
-        return r.json()
-      })
-      .then(data => {
-        setMasters(data || [])
-        setLoading(false)
+        setStatus(`Привет, ${data.user?.firstName || 'друг'}! Данные загружены.`)
       })
       .catch(err => {
-        setError(err.message || 'Ошибка загрузки')
-        setLoading(false)
+        setStatus(`Ошибка: ${err.message}`)
       })
   }, [])
 
-  if (loading) return <div style={{ padding: 100, textAlign: 'center' }}>Загрузка...</div>
-  if (error) return <div style={{ padding: 100, textAlign: 'center', color: 'red' }}>{error}</div>
-
   return (
-    <div style={{ padding: 16 }}>
-      <h2>Привет, {user?.firstName || 'Гость'}!</h2>
-      <p style={{ margin: '16px 0' }}>Мастера:</p>
-      {masters.length === 0 && <p>Пока нет мастеров</p>}
-      {masters.map((m: any) => (
-        <div key={m.id} style={{ background: '#f5f5f5', borderRadius: 12, padding: 16, marginBottom: 12 }}>
-          <h3>{m.title}</h3>
-          <p>{m.description || 'Нет описания'}</p>
-          <p style={{ opacity: 0.7, fontSize: 14 }}>
-            {m.user?.firstName} {m.user?.lastName}
-          </p>
-        </div>
-      ))}
+    <div style={{ padding: 20, fontFamily: 'sans-serif' }}>
+      <h1>Kooz</h1>
+      <p style={{ marginTop: 20, fontSize: 18 }}>{status}</p>
     </div>
   )
 }
