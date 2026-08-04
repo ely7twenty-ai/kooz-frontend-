@@ -26,12 +26,6 @@
       font-size: 28px;
       color: #2d2d2d;
     }
-    .status {
-      text-align: center;
-      padding: 20px;
-      color: #666;
-      font-size: 16px;
-    }
     .card {
       background: white;
       border-radius: 16px;
@@ -55,20 +49,45 @@
       font-weight: 600;
       font-size: 18px;
     }
-    .loader {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 2px solid #ddd;
-      border-top-color: #007AFF;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-right: 8px;
-      vertical-align: middle;
+    .status-box {
+      background: #fff3cd;
+      border-radius: 12px;
+      padding: 16px;
+      margin-top: 20px;
+      font-size: 14px;
+      color: #856404;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
-    .error { color: #e74c3c; }
-    .success { color: #27ae60; }
+    .error-box {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    .success-box {
+      background: #d4edda;
+      color: #155724;
+    }
+    .btn {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      margin-top: 16px;
+      background: #007AFF;
+      color: white;
+      border: none;
+      border-radius: 12px;
+      font-size: 16px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .debug {
+      margin-top: 20px;
+      padding: 12px;
+      background: #f0f0f0;
+      border-radius: 8px;
+      font-size: 12px;
+      color: #666;
+      font-family: monospace;
+      word-break: break-all;
+    }
   </style>
 </head>
 <body>
@@ -82,49 +101,44 @@
     const { useState, useEffect } = React;
 
     function App() {
-      const [status, setStatus] = useState('Загрузка...');
+      const [status, setStatus] = useState('Проверка Telegram...');
       const [user, setUser] = useState(null);
-      const [isError, setIsError] = useState(false);
+      const [error, setError] = useState(null);
+      const [debug, setDebug] = useState('');
 
       useEffect(() => {
         const tg = window.Telegram?.WebApp;
-
+        
         if (!tg) {
-          setStatus('Откройте через Telegram Mini App');
+          setStatus('no-telegram');
+          setDebug('window.Telegram.WebApp не найден');
           return;
         }
 
         tg.ready();
         tg.expand();
-        tg.setHeaderColor('#f5f5f5');
-        tg.setBackgroundColor('#f5f5f5');
-
+        
         const initData = tg.initData;
+        setDebug('initData: ' + (initData ? 'есть (' + initData.length + ' символов)' : 'НЕТ'));
 
         if (!initData) {
-          setStatus('Ошибка: нет initData. Перезапустите через бота.');
-          setIsError(true);
+          setStatus('no-initdata');
           return;
         }
 
-        setStatus('Авторизация...');
+        setStatus('auth');
 
-        const controller = new AbortController();
-        const timeoutId = setTimeout(() => controller.abort(), 15000);
-
+        // Пробуем авторизоваться
         fetch(API_URL + '/api/auth/telegram', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ initData }),
-          signal: controller.signal,
         })
           .then(async (r) => {
-            clearTimeout(timeoutId);
-            if (!r.ok) {
-              const text = await r.text();
-              throw new Error('Сервер ответил ' + r.status + ': ' + text);
-            }
-            return r.json();
+            const text = await r.text();
+            setDebug(prev => prev + '\\nОтвет сервера: ' + r.status + ' ' + text.substring(0, 200));
+            if (!r.ok) throw new Error('Сервер ' + r.status + ': ' + text);
+            return JSON.parse(text);
           })
           .then((data) => {
             if (data.error) throw new Error(data.error);
@@ -132,15 +146,13 @@
             setStatus('ok');
           })
           .catch((err) => {
-            if (err.name === 'AbortError') {
-              setStatus('Сервер долго не отвечает. Подождите 30 сек и обновите — бэкенд просыпается.');
-            } else {
-              setStatus('Ошибка: ' + err.message);
-            }
-            setIsError(true);
+            setError(err.message);
+            setStatus('error');
+            setDebug(prev => prev + '\\nОшибка: ' + err.message);
           });
       }, []);
 
+      // Успешная авторизация
       if (status === 'ok' && user) {
         return React.createElement('div', { className: 'container' },
           React.createElement('div', { className: 'header' },
@@ -152,23 +164,50 @@
             React.createElement('p', { className: 'price' }, '1 500 ₽'),
             React.createElement('p', null, '⏱ 60 минут')
           ),
-          React.createElement('div', { className: 'card' },
-            React.createElement('p', { className: 'success' }, '✅ Авторизация прошла успешно'),
+          React.createElement('div', { className: 'card success-box' },
+            React.createElement('p', null, '✅ Авторизация прошла успешно'),
             React.createElement('p', null, 'Роль: ' + user.role)
           )
         );
       }
 
+      // Главный экран (показываем карточку даже без авторизации)
       return React.createElement('div', { className: 'container' },
         React.createElement('div', { className: 'header' },
           React.createElement('h1', null, 'Kooz')
         ),
-        React.createElement('div', { className: 'status' + (isError ? ' error' : '') },
-          !isError && status !== 'Откройте через Telegram Mini App' 
-            ? React.createElement('span', { className: 'loader' }) 
-            : null,
-          status
-        )
+        
+        // Карточка салона — показываем ВСЕГДА
+        React.createElement('div', { className: 'card' },
+          React.createElement('h2', null, '🎨 Салон красоты "Анна"'),
+          React.createElement('p', null, 'Услуга: Маникюр с покрытием'),
+          React.createElement('p', { className: 'price' }, '1 500 ₽'),
+          React.createElement('p', null, '⏱ 60 минут')
+        ),
+
+        // Статус авторизации
+        status === 'auth' && React.createElement('div', { className: 'status-box' },
+          '⏳ Авторизация через Telegram...'
+        ),
+
+        status === 'no-telegram' && React.createElement('div', { className: 'status-box error-box' },
+          'Откройте через Telegram Mini App'
+        ),
+
+        status === 'no-initdata' && React.createElement('div', { className: 'status-box error-box' },
+          'Ошибка: нет initData. Закройте и откройте заново через бота.'
+        ),
+
+        status === 'error' && React.createElement('div', { className: 'status-box error-box' },
+          React.createElement('p', null, '❌ Ошибка: ' + error),
+          React.createElement('button', { 
+            className: 'btn',
+            onClick: () => window.location.reload()
+          }, '🔄 Повторить')
+        ),
+
+        // Отладочная информация
+        React.createElement('div', { className: 'debug' }, debug || 'Загрузка...')
       );
     }
 
