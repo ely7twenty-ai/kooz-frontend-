@@ -1,10 +1,12 @@
-<!DOCTYPE html>
+          <!DOCTYPE html>
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Kooz</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body {
@@ -93,9 +95,6 @@
 <body>
   <div id="root"></div>
 
-  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-
   <script>
     const API_URL = 'https://kooz-backend.onrender.com';
     const { useState, useEffect } = React;
@@ -108,7 +107,7 @@
 
       useEffect(() => {
         const tg = window.Telegram?.WebApp;
-        
+
         if (!tg) {
           setStatus('no-telegram');
           setDebug('window.Telegram.WebApp не найден');
@@ -117,7 +116,7 @@
 
         tg.ready();
         tg.expand();
-        
+
         const initData = tg.initData;
         setDebug('initData: ' + (initData ? 'есть (' + initData.length + ' символов)' : 'НЕТ'));
 
@@ -125,36 +124,37 @@
           setStatus('no-initdata');
           return;
         }
-setStatus('auth');
 
-// Сначала "будим" сервер (Render cold start)
-fetch(API_URL + '/api/masters', { method: 'GET', mode: 'cors' })
-  .then(() => {
-    // Теперь делаем авторизацию
-    return fetch(API_URL + '/api/auth/telegram', {
-      method: 'POST',
-      mode: 'cors',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ initData }),
-    });
-  })
-  .then(async (r) => {
-    const text = await r.text();
-    setDebug(prev => prev + '\nОтвет сервера: ' + r.status + ' ' + text.substring(0, 200));
-    if (!r.ok) throw new Error('Сервер ' + r.status + ': ' + text);
-    return JSON.parse(text);
-  })
-  .then((data) => {
-    if (data.error) throw new Error(data.error);
-    setUser(data.user);
-    setStatus('ok');
-  })
-  .catch((err) => {
-    setError(err.message);
-    setStatus('error');
-    setDebug(prev => prev + '\nОшибка: ' + err.message);
-  });
-        
+        setStatus('auth');
+
+        // Сначала "будим" сервер (Render cold start)
+        fetch(API_URL + '/api/masters', { method: 'GET', mode: 'cors' })
+          .then(() => {
+            // Теперь делаем авторизацию
+            return fetch(API_URL + '/api/auth/telegram', {
+              method: 'POST',
+              mode: 'cors',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ initData }),
+            });
+          })
+          .then(async (r) => {
+            const text = await r.text();
+            setDebug(prev => prev + '\nОтвет сервера: ' + r.status + ' ' + text.substring(0, 200));
+            if (!r.ok) throw new Error('Сервер ' + r.status + ': ' + text);
+            return JSON.parse(text);
+          })
+          .then((data) => {
+            if (data.error) throw new Error(data.error);
+            setUser(data.user);
+            setStatus('ok');
+          })
+          .catch((err) => {
+            setError(err.message);
+            setStatus('error');
+            setDebug(prev => prev + '\nОшибка: ' + err.message);
+          });
+      }, []);
 
       // Успешная авторизация
       if (status === 'ok' && user) {
@@ -180,7 +180,7 @@ fetch(API_URL + '/api/masters', { method: 'GET', mode: 'cors' })
         React.createElement('div', { className: 'header' },
           React.createElement('h1', null, 'Kooz')
         ),
-        
+
         // Карточка салона — показываем ВСЕГДА
         React.createElement('div', { className: 'card' },
           React.createElement('h2', null, '🎨 Салон красоты "Анна"'),
@@ -204,7 +204,7 @@ fetch(API_URL + '/api/masters', { method: 'GET', mode: 'cors' })
 
         status === 'error' && React.createElement('div', { className: 'status-box error-box' },
           React.createElement('p', null, '❌ Ошибка: ' + error),
-          React.createElement('button', { 
+          React.createElement('button', {
             className: 'btn',
             onClick: () => window.location.reload()
           }, '🔄 Повторить')
