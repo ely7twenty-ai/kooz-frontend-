@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Kooz — Диагностика POST</title>
+  <title>Kooz — Диагностика Body</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -18,7 +18,7 @@
 </head>
 <body>
   <div class="container">
-    <h1>Kooz — Диагностика POST</h1>
+    <h1>Kooz — Диагностика Body</h1>
     <div class="card">
       <h2>Логи</h2>
       <div class="log" id="log">Запуск...</div>
@@ -36,104 +36,42 @@
       logEl.textContent = logs.join('\n');
     }
 
-    async function test(name, fn) {
+    async function test(name, bodyContent, headers) {
       log('');
       log('--- ' + name + ' ---');
+      log('body: ' + JSON.stringify(bodyContent).substring(0, 60));
       try {
-        const result = await fn();
-        log('✅ УСПЕХ: ' + result);
+        const opts = { method: 'POST' };
+        if (headers) opts.headers = headers;
+        if (bodyContent !== undefined) opts.body = bodyContent;
+        const r = await fetch(API_URL + '/api/auth/telegram', opts);
+        const text = await r.text();
+        log('✅ status ' + r.status + ' | ' + text.substring(0, 40));
       } catch (e) {
-        log('❌ ОШИБКА: ' + e.name + ' — ' + e.message);
+        log('❌ ' + e.name + ': ' + e.message);
       }
     }
 
     async function runAllTests() {
       logs = [];
-      log('=== Kooz POST Диагностика ===');
+      log('=== Диагностика Body ===');
       log('Время: ' + new Date().toLocaleTimeString());
 
-      const tg = window.Telegram?.WebApp;
-      log('Telegram WebApp: ' + (tg ? 'да' : 'нет'));
-      log('initData: ' + (tg?.initData ? tg.initData.length + ' симв' : 'нет'));
-      log('');
+      await test('1. Без body', undefined, null);
+      await test('2. body = ""', '', null);
+      await test('3. body = "a"', 'a', null);
+      await test('4. body = "ab"', 'ab', null);
+      await test('5. body = "{}"', '{}', null);
+      await test('6. body = "{\"a\":\"b\"}"', '{"a":"b"}', null);
+      await test('7. body = "{\"initData\":\"test\"}"', '{"initData":"test"}', null);
+      await test('8. JSON.stringify({a:"b"})', JSON.stringify({a:"b"}), null);
+      await test('9. JSON.stringify({initData:"test"})', JSON.stringify({initData:"test"}), null);
+      await test('10. body="{}" + Content-Type', '{}', {'Content-Type':'application/json'});
+      await test('11. JSON.stringify + Content-Type', JSON.stringify({initData:"test"}), {'Content-Type':'application/json'});
 
-      // 1. GET (уже работает)
-      await test('GET /api/masters', async () => {
-        const r = await fetch(API_URL + '/api/masters');
-        return 'status ' + r.status;
-      });
-
-      // 2. POST без body
-      await test('POST без body', async () => {
-        const r = await fetch(API_URL + '/api/auth/telegram', { method: 'POST' });
-        return 'status ' + r.status;
-      });
-
-      // 3. POST с пустым JSON body
-      await test('POST с пустым body {}', async () => {
-        const r = await fetch(API_URL + '/api/auth/telegram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: '{}',
-        });
-        return 'status ' + r.status;
-      });
-
-      // 4. POST с реальным initData
-      await test('POST с реальным initData', async () => {
-        const r = await fetch(API_URL + '/api/auth/telegram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: tg?.initData || 'test' }),
-        });
-        const text = await r.text();
-        return 'status ' + r.status + ', ответ: ' + text.substring(0, 60);
-      });
-
-      // 5. POST с mode: cors
-      await test('POST с mode: "cors"', async () => {
-        const r = await fetch(API_URL + '/api/auth/telegram', {
-          method: 'POST',
-          mode: 'cors',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: 'test' }),
-        });
-        return 'status ' + r.status;
-      });
-
-      // 6. POST с credentials: omit
-      await test('POST с credentials: "omit"', async () => {
-        const r = await fetch(API_URL + '/api/auth/telegram', {
-          method: 'POST',
-          credentials: 'omit',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ initData: 'test' }),
-        });
-        return 'status ' + r.status;
-      });
-
-      // 7. XHR POST
-      await test('XHR POST', async () => {
-        return await new Promise((resolve, reject) => {
-          const xhr = new XMLHttpRequest();
-          xhr.open('POST', API_URL + '/api/auth/telegram');
-          xhr.setRequestHeader('Content-Type', 'application/json');
-          xhr.onload = () => resolve('status ' + xhr.status + ', ответ: ' + xhr.responseText.substring(0, 40));
-          xhr.onerror = () => reject(new Error('XHR onerror'));
-          xhr.ontimeout = () => reject(new Error('XHR timeout'));
-          xhr.send(JSON.stringify({ initData: tg?.initData || 'test' }));
-        });
-      });
-
-      // 8. fetch с text/plain (без preflight)
-      await test('POST с text/plain (без preflight)', async () => {
-        const r = await fetch(API_URL + '/api/auth/telegram', {
-          method: 'POST',
-          headers: { 'Content-Type': 'text/plain' },
-          body: JSON.stringify({ initData: 'test' }),
-        });
-        return 'status ' + r.status;
-      });
+      const fd = new FormData();
+      fd.append('initData', 'test');
+      await test('12. FormData', fd, null);
 
       log('');
       log('=== Готово ===');
