@@ -3,110 +3,132 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>Kooz — Cache Test</title>
+  <title>Kooz</title>
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+  <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
-    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; color: #333; padding: 12px; }
-    .container { max-width: 480px; margin: 0 auto; }
-    h1 { text-align: center; padding: 16px 0; font-size: 18px; }
-    .card { background: white; border-radius: 10px; padding: 12px; margin-top: 10px; box-shadow: 0 1px 3px rgba(0,0,0,0.06); }
-    .card h2 { font-size: 13px; margin-bottom: 6px; color: #1a1a1a; }
-    .log { font-family: monospace; font-size: 10px; background: #f8f9fa; padding: 8px; border-radius: 6px; white-space: pre-wrap; word-break: break-all; max-height: 500px; overflow-y: auto; }
-    .btn { display: block; width: 100%; padding: 12px; margin-top: 10px; background: #007AFF; color: white; border: none; border-radius: 10px; font-size: 15px; font-weight: 600; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f5f5; min-height: 100vh; color: #333; }
+    .container { max-width: 480px; margin: 0 auto; padding: 20px; }
+    .header { text-align: center; padding: 40px 0 20px; }
+    .header h1 { font-size: 28px; color: #2d2d2d; }
+    .card { background: white; border-radius: 16px; padding: 20px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    .card h2 { font-size: 20px; margin-bottom: 12px; color: #1a1a1a; }
+    .card p { color: #666; font-size: 15px; line-height: 1.5; margin-bottom: 8px; }
+    .price { color: #007AFF; font-weight: 600; font-size: 18px; }
+    .status-box { background: #fff3cd; border-radius: 12px; padding: 16px; margin-top: 20px; font-size: 14px; color: #856404; }
+    .error-box { background: #f8d7da; color: #721c24; }
+    .success-box { background: #d4edda; color: #155724; }
+    .btn { display: block; width: 100%; padding: 14px; margin-top: 16px; background: #007AFF; color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 600; cursor: pointer; }
+    .debug { margin-top: 20px; padding: 12px; background: #f0f0f0; border-radius: 8px; font-size: 12px; color: #666; font-family: monospace; word-break: break-all; }
   </style>
 </head>
 <body>
-  <div class="container">
-    <h1>Kooz — Cache Test</h1>
-    <div class="card">
-      <h2>Логи</h2>
-      <div class="log" id="log">Запуск...</div>
-    </div>
-    <button class="btn" onclick="runTests()">🔄 Повторить</button>
-  </div>
+  <div id="root"></div>
 
   <script>
     const API_URL = 'https://kooz-backend.onrender.com';
-    const logEl = document.getElementById('log');
-    let logs = [];
+    const { useState, useEffect } = React;
 
-    function log(msg) {
-      logs.push(msg);
-      logEl.textContent = logs.join('\n');
+    function App() {
+      const [status, setStatus] = useState('Проверка Telegram...');
+      const [user, setUser] = useState(null);
+      const [error, setError] = useState(null);
+      const [debug, setDebug] = useState('');
+
+      useEffect(() => {
+        const tg = window.Telegram?.WebApp;
+
+        if (!tg) {
+          setStatus('no-telegram');
+          setDebug('Telegram.WebApp не найден');
+          return;
+        }
+
+        tg.ready();
+        tg.expand();
+
+        const initData = tg.initData;
+        setDebug('initData: ' + (initData ? 'есть (' + initData.length + ' символов)' : 'НЕТ'));
+
+        if (!initData) {
+          setStatus('no-initdata');
+          return;
+        }
+
+        setStatus('auth');
+
+        // Разбудим сервер GET-запросом
+        fetch(API_URL + '/api/masters', { cache: 'no-store' })
+          .then(() => {
+            // Авторизация через POST (как раньше)
+            return fetch(API_URL + '/api/auth/telegram', {
+              method: 'POST',
+              cache: 'no-store',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ initData }),
+            });
+          })
+          .then(async (r) => {
+            const text = await r.text();
+            setDebug(prev => prev + '\nСервер: ' + r.status + ' ' + text.substring(0, 100));
+            if (!r.ok) throw new Error(text);
+            return JSON.parse(text);
+          })
+          .then((data) => {
+            if (data.error) throw new Error(data.error);
+            setUser(data.user);
+            setStatus('ok');
+          })
+          .catch((err) => {
+            setError(err.message);
+            setStatus('error');
+            setDebug(prev => prev + '\nОшибка: ' + err.message);
+          });
+      }, []);
+
+      if (status === 'ok' && user) {
+        return React.createElement('div', { className: 'container' },
+          React.createElement('div', { className: 'header' },
+            React.createElement('h1', null, '👋 Привет, ' + (user.firstName || 'друг') + '!')
+          ),
+          React.createElement('div', { className: 'card' },
+            React.createElement('h2', null, '🎨 Салон красоты "Анна"'),
+            React.createElement('p', null, 'Услуга: Маникюр с покрытием'),
+            React.createElement('p', { className: 'price' }, '1 500 ₽'),
+            React.createElement('p', null, '⏱ 60 минут')
+          ),
+          React.createElement('div', { className: 'card success-box' },
+            React.createElement('p', null, '✅ Авторизация прошла успешно'),
+            React.createElement('p', null, 'Роль: ' + user.role)
+          )
+        );
+      }
+
+      return React.createElement('div', { className: 'container' },
+        React.createElement('div', { className: 'header' },
+          React.createElement('h1', null, 'Kooz')
+        ),
+        React.createElement('div', { className: 'card' },
+          React.createElement('h2', null, '🎨 Салон красоты "Анна"'),
+          React.createElement('p', null, 'Услуга: Маникюр с покрытием'),
+          React.createElement('p', { className: 'price' }, '1 500 ₽'),
+          React.createElement('p', null, '⏱ 60 минут')
+        ),
+        status === 'auth' && React.createElement('div', { className: 'status-box' }, '⏳ Авторизация...'),
+        status === 'no-telegram' && React.createElement('div', { className: 'status-box error-box' }, 'Откройте через Telegram Mini App'),
+        status === 'no-initdata' && React.createElement('div', { className: 'status-box error-box' }, 'Нет initData. Закройте и откройте заново.'),
+        status === 'error' && React.createElement('div', { className: 'status-box error-box' },
+          React.createElement('p', null, '❌ Ошибка: ' + error),
+          React.createElement('button', { className: 'btn', onClick: () => window.location.reload() }, '🔄 Повторить')
+        ),
+        React.createElement('div', { className: 'debug' }, debug || 'Загрузка...')
+      );
     }
 
-    async function testFetch(name, url, opts) {
-      log('');
-      log('--- ' + name + ' ---');
-      try {
-        const r = await fetch(url, opts || {});
-        const text = await r.text();
-        log('✅ status ' + r.status + ' | ' + text.substring(0, 40));
-      } catch (e) {
-        log('❌ ' + e.name + ': ' + e.message);
-      }
-    }
-
-    async function runTests() {
-      logs = [];
-      log('=== Cache Test ===');
-      const ts = Date.now();
-
-      // 1. GET /api/masters (без ?) — работает
-      await testFetch('1. GET /api/masters', API_URL + '/api/masters');
-
-      // 2. GET /api/masters?test=123 — проверим query params
-      await testFetch('2. GET /api/masters?test=123', API_URL + '/api/masters?test=123');
-
-      // 3. GET /api/auth/telegram с cache: no-store
-      await testFetch('3. GET auth + no-store', API_URL + '/api/auth/telegram?initData=test&_t=' + ts, { cache: 'no-store' });
-
-      // 4. POST без Content-Type (как раньше работал)
-      log('');
-      log('--- 4. POST без Content-Type ---');
-      try {
-        const r = await fetch(API_URL + '/api/auth/telegram', { method: 'POST', cache: 'no-store' });
-        const text = await r.text();
-        log('✅ status ' + r.status + ' | ' + text.substring(0, 40));
-      } catch (e) {
-        log('❌ ' + e.name + ': ' + e.message);
-      }
-
-      // 5. POST с body но БЕЗ Content-Type
-      log('');
-      log('--- 5. POST с body, без Content-Type ---');
-      try {
-        const r = await fetch(API_URL + '/api/auth/telegram', {
-          method: 'POST',
-          cache: 'no-store',
-          body: '{"initData":"test"}',
-        });
-        const text = await r.text();
-        log('✅ status ' + r.status + ' | ' + text.substring(0, 40));
-      } catch (e) {
-        log('❌ ' + e.name + ': ' + e.message);
-      }
-
-      // 6. Image() для GET
-      log('');
-      log('--- 6. Image() GET ---');
-      try {
-        await new Promise((resolve, reject) => {
-          const img = new Image();
-          img.onload = () => { log('✅ Image loaded'); resolve(); };
-          img.onerror = () => { log('❌ Image error'); resolve(); };
-          img.src = API_URL + '/api/auth/telegram?initData=test&_t=' + (ts+1);
-        });
-      } catch (e) {
-        log('❌ ' + e.message);
-      }
-
-      log('');
-      log('=== Готово ===');
-    }
-
-    runTests();
+    const root = ReactDOM.createRoot(document.getElementById('root'));
+    root.render(React.createElement(App));
   </script>
 </body>
 </html>
